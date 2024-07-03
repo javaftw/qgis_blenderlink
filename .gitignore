@@ -1,0 +1,15 @@
+#Folders
+target/
+nbproject/private/
+nbproject/
+build/
+nbbuild/
+dist/
+nbdist/
+old/
+test/
+tests/
+.ropeproject/
+
+#Files
+*.toml
