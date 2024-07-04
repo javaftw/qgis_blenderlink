@@ -9,7 +9,12 @@ bl_info = {
 }
 
 import bpy
-from .operators import QGIS_OT_connect, QGIS_OT_update_layers, QGIS_OT_import_layer, QGIS_OT_update_snapshot
+
+from .operator_connect import QGIS_OT_connect
+from .operator_update_layers import  QGIS_OT_update_layers
+from .operator_import_layer import QGIS_OT_import_layer
+from .operator_snapshot import QGIS_OT_update_snapshot
+
 from .properties import QGISLayerProperties, QGISProjectProperties
 from .panels import QGIS_PT_import_panel
 
