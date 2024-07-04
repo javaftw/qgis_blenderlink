@@ -1,6 +1,9 @@
 import bpy
 from bpy.types import Panel
-from .operators import QGIS_OT_connect, QGIS_OT_update_layers, QGIS_OT_import_layer
+from .operator_connect import QGIS_OT_connect
+from .operator_update_layers import  QGIS_OT_update_layers
+from .operator_import_layer import QGIS_OT_import_layer
+from .operator_snapshot import QGIS_OT_update_snapshot
 
 # Define a new panel in the 3D Viewport UI
 class QGIS_PT_import_panel(Panel):
@@ -43,7 +46,7 @@ class QGIS_PT_import_panel(Panel):
             layout.separator()
             layout.operator(QGIS_OT_update_layers.bl_idname, text="Update Layers")
             layout.separator()
-            layout.operator("qgis.update_snapshot", text="Update from canvas")
+            layout.operator(QGIS_OT_update_snapshot.bl_idname, text="Update from canvas")
         else:
             # If not linked, display the "Link" button to establish the connection
             layout.operator(QGIS_OT_connect.bl_idname, text="Link")
