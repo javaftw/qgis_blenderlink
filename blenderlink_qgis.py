@@ -1,14 +1,16 @@
-from qgis.core import QgsProject, QgsVectorLayer, QgsWkbTypes, QgsSingleSymbolRenderer, QgsMarkerSymbol, QgsLineSymbol, QgsFillSymbol, QgsCoordinateReferenceSystem
+from qgis.core import QgsProject, QgsVectorLayer, QgsWkbTypes, QgsSingleSymbolRenderer, QgsMarkerSymbol, QgsLineSymbol, \
+    QgsFillSymbol, QgsCoordinateReferenceSystem
 from qgis.PyQt.QtWidgets import QAction
 from qgis.utils import iface
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
-            
+
 from qgis.core import QgsMapSettings, QgsMapRendererCustomPainterJob
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import QSize, QBuffer, QByteArray
 import base64
+
 
 class BlenderLinkRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -53,47 +55,49 @@ class BlenderLinkRequestHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+
 def get_map_snapshot():
     canvas = iface.mapCanvas()
     settings = canvas.mapSettings()
-    
+
     # Create a QImage with the same dimensions as the map canvas
     img = QImage(QSize(canvas.width(), canvas.height()), QImage.Format_ARGB32)
     img.fill(0)  # Fill with transparent color
-    
+
     # Create a QPainter to render the map onto the image
     painter = QPainter(img)
     job = QgsMapRendererCustomPainterJob(settings, painter)
     job.start()
     job.waitForFinished()
     painter.end()
-    
+
     # Convert the image to base64
     byte_array = QByteArray()
     buffer = QBuffer(byte_array)
     buffer.open(QBuffer.WriteOnly)
     img.save(buffer, "PNG")
     img_str = base64.b64encode(byte_array.data()).decode()
-    
+
     return {
         'image': img_str,
         'width': canvas.width(),
         'height': canvas.height()
     }
 
+
 def get_project_info():
     project = QgsProject.instance()
     canvas = iface.mapCanvas()
-    
+
     # Get project CRS
     project_crs = project.crs()
-    
+
     # Get map units
     map_units = project_crs.mapUnits()
-    
+
     canvas = iface.mapCanvas()
     project_extent = canvas.extent()
-    
+
     return {
         'project_name': project.fileName(),
         'project_crs': {
@@ -117,33 +121,6 @@ def get_project_info():
         'canvas_scale': canvas.scale()
     }
 
-def get_layers_info():
-    project = QgsProject.instance()
-    layers = []
-    for layer_id, layer in project.mapLayers().items():
-        if layer.type() == QgsVectorLayer.VectorLayer:
-            layer_crs = layer.crs()
-            layer_info = {
-                'id': layer_id,
-                'name': layer.name(),
-                'type': QgsWkbTypes.displayString(layer.wkbType()),
-                'feature_count': layer.featureCount(),
-                'crs': {
-                    'auth_id': layer_crs.authid(),
-                    'description': layer_crs.description(),
-                    'is_geographic': layer_crs.isGeographic(),
-                    'proj_definition': layer_crs.toProj4()
-                },
-                'extent': {
-                    'xmin': layer.extent().xMinimum(),
-                    'ymin': layer.extent().yMinimum(),
-                    'xmax': layer.extent().xMaximum(),
-                    'ymax': layer.extent().yMaximum()
-                },
-                'style': get_layer_style(layer)
-            }
-            layers.append(layer_info)
-    return {'layers': layers}
 
 def get_layers_info():
     project = QgsProject.instance()
@@ -172,6 +149,36 @@ def get_layers_info():
             }
             layers.append(layer_info)
     return {'layers': layers}
+
+
+def get_layers_info():
+    project = QgsProject.instance()
+    layers = []
+    for layer_id, layer in project.mapLayers().items():
+        if layer.type() == QgsVectorLayer.VectorLayer:
+            layer_crs = layer.crs()
+            layer_info = {
+                'id': layer_id,
+                'name': layer.name(),
+                'type': QgsWkbTypes.displayString(layer.wkbType()),
+                'feature_count': layer.featureCount(),
+                'crs': {
+                    'auth_id': layer_crs.authid(),
+                    'description': layer_crs.description(),
+                    'is_geographic': layer_crs.isGeographic(),
+                    'proj_definition': layer_crs.toProj4()
+                },
+                'extent': {
+                    'xmin': layer.extent().xMinimum(),
+                    'ymin': layer.extent().yMinimum(),
+                    'xmax': layer.extent().xMaximum(),
+                    'ymax': layer.extent().yMaximum()
+                },
+                'style': get_layer_style(layer)
+            }
+            layers.append(layer_info)
+    return {'layers': layers}
+
 
 def get_layer_style(layer):
     renderer = layer.renderer()
@@ -212,6 +219,7 @@ def get_layer_style(layer):
             }
     return {}
 
+
 def export_layer_data(layer_id):
     layer = QgsProject.instance().mapLayer(layer_id)
     if not layer:
@@ -226,7 +234,7 @@ def export_layer_data(layer_id):
             attributes = {field.name(): convert_to_python(feature[field.name()]) for field in layer.fields()}
             feature_data = {
                 "type": geom_type,
-                "geometry": json.loads(geom.asJson()), 
+                "geometry": json.loads(geom.asJson()),
                 "attributes": attributes
             }
             data.append(feature_data)
@@ -241,6 +249,7 @@ def export_layer_style(layer_id):
     style = get_layer_style(layer)
     return style
 
+
 def get_map_canvas_extent():
     canvas = iface.mapCanvas()
     extent = canvas.extent()
@@ -251,10 +260,12 @@ def get_map_canvas_extent():
         'ymax': extent.yMaximum()
     }
 
+
 def convert_to_python(value):
     if isinstance(value, (int, float, str, bool)):
         return value
     return str(value)
+
 
 def run_server():
     server_address = ('', 8000)
@@ -262,12 +273,14 @@ def run_server():
     print("BlenderLink server running on port 8000")
     httpd.serve_forever()
 
+
 def blenderlink_button():
     action = QAction("BlenderLink Active", iface.mainWindow())
     action.setCheckable(True)
     action.setChecked(True)
     action.triggered.connect(lambda checked: print("BlenderLink server is", "active" if checked else "inactive"))
     iface.addToolBarIcon(action)
+
 
 # Start the server in a separate thread
 server_thread = threading.Thread(target=run_server)
