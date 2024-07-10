@@ -1,9 +1,10 @@
 import bpy
 from bpy.types import Panel
 from .operator_connect import QGIS_OT_connect
-from .operator_update_layers import  QGIS_OT_update_layers
+from .operator_update_layers import QGIS_OT_update_layers
 from .operator_import_layer import QGIS_OT_import_layer
 from .operator_snapshot import QGIS_OT_update_snapshot
+
 
 # Define a new panel in the 3D Viewport UI
 class QGIS_PT_import_panel(Panel):
@@ -21,10 +22,10 @@ class QGIS_PT_import_panel(Panel):
     def draw(self, context):
         # Reference to the panel's layout object
         layout = self.layout
-        
+
         # Add a property field for the QGIS server URL
         layout.prop(context.scene, "qgis_server_url")
-        
+
         # Check if the QGIS connection is active
         if context.scene.qgis_linked:
             # If linked, display the "Linked" button and the "Update Layers" button
@@ -33,7 +34,8 @@ class QGIS_PT_import_panel(Panel):
             for proj in context.scene.qgis_project:
                 project_box = layout.box()
                 project_row = project_box.row()
-                project_row.prop(proj, "is_expanded", icon="TRIA_DOWN" if proj.is_expanded else "TRIA_RIGHT", icon_only=True, emboss=True)
+                project_row.prop(proj, "is_expanded", icon="TRIA_DOWN" if proj.is_expanded else "TRIA_RIGHT",
+                                 icon_only=True, emboss=True)
                 project_row.label(text=f"{proj.label}")
                 if proj.is_expanded:
                     project_box.row().label(text=f"Location: {proj.name}")
@@ -50,7 +52,7 @@ class QGIS_PT_import_panel(Panel):
         else:
             # If not linked, display the "Link" button to establish the connection
             layout.operator(QGIS_OT_connect.bl_idname, text="Link")
-        
+
         # Add a separator line for better UI organization
         layout.separator()
 
@@ -61,12 +63,14 @@ class QGIS_PT_import_panel(Panel):
             # Create a row within the box
             row = box.row()
             # Add a property to expand/collapse layer details with an arrow icon
-            row.prop(layer, "is_expanded", icon="TRIA_DOWN" if layer.is_expanded else "TRIA_RIGHT", icon_only=True, emboss=False)
+            row.prop(layer, "is_expanded", icon="TRIA_DOWN" if layer.is_expanded else "TRIA_RIGHT", icon_only=True,
+                     emboss=False)
             # Display the layer's name
             row.label(text=layer.name)
             # Add an "Import" button for each layer
-            row.operator(QGIS_OT_import_layer.bl_idname, text="Import").layer_id = layer.layer_id
-            
+            if layer.type != "raster":
+                row.operator(QGIS_OT_import_layer.bl_idname, text="Import").layer_id = layer.layer_id
+
             # If the layer is expanded, show additional details
             if layer.is_expanded:
                 # Display the type of the layer (e.g., Point, Line, Polygon)

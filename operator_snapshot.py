@@ -1,10 +1,9 @@
+import base64
+
 import bpy
 import requests
-import bmesh
-import base64
-from bpy.props import StringProperty
 from bpy.types import Operator
-from .utils import error_handler, add_custom_properties
+
 
 # Operator to update the QGIS map snapshot
 class QGIS_OT_update_snapshot(Operator):
@@ -76,11 +75,14 @@ class QGIS_OT_update_snapshot(Operator):
         self.report({'INFO'}, "QGIS snapshot updated")
         return {'FINISHED'}
 
+
 def register():
     bpy.utils.register_class(QGIS_OT_update_snapshot)
 
+
 def unregister():
     bpy.utils.unregister_class(QGIS_OT_update_snapshot)
+
 
 if __name__ == "__main__":
     register()

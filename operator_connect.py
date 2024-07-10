@@ -96,8 +96,19 @@ class QGIS_OT_connect(Operator):
             item = context.scene.qgis_layers.add()
             item.name = layer.get('name', 'Unnamed Layer')
             item.layer_id = layer.get('id', '')
-            item.type = layer.get('type', 'Unknown')
+
+            # Handle different layer types
+            if layer.get('type') == 'vector':
+                item.type = layer.get('geometry_type', 'Unknown Vector')
+            elif layer.get('type') == 'Displacement':
+                item.type = 'Displacement'
+            else:
+                item.type = layer.get('type', 'Unknown')
+
             item.feature_count = str(layer.get('feature_count', 0))
+
+        # Print the layers data for debugging
+        print("Layers data received from QGIS:", data)
 
 
 def register():

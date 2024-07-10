@@ -1,101 +1,61 @@
-from qgis.core import QgsProject, QgsVectorLayer, QgsWkbTypes, QgsSingleSymbolRenderer, QgsMarkerSymbol, QgsLineSymbol, \
-    QgsFillSymbol, QgsCoordinateReferenceSystem
+from qgis.core import (QgsProject, QgsVectorLayer, QgsMapLayer, QgsWkbTypes, QgsSingleSymbolRenderer, QgsMarkerSymbol, QgsLineSymbol,
+                       QgsFillSymbol, QgsCoordinateReferenceSystem, QgsRasterLayer, QgsRasterDataProvider,
+                       QgsMapSettings, QgsMapRendererCustomPainterJob, QgsUnitTypes)
 from qgis.PyQt.QtWidgets import QAction
-from qgis.utils import iface
-import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
-
-from qgis.core import QgsMapSettings, QgsMapRendererCustomPainterJob
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import QSize, QBuffer, QByteArray
-import base64
+from qgis.utils import iface
+import json, base64, threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
 class BlenderLinkRequestHandler(BaseHTTPRequestHandler):
+    routes = {
+        '/project_info': lambda: get_project_info(),
+        '/layers': lambda: get_layers_info(),
+        '/extent': lambda: get_map_canvas_extent(),
+        '/snapshot': lambda: get_map_snapshot()
+    }
+
     def do_GET(self):
-        if self.path == '/project_info':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            project_info = get_project_info()
-            self.wfile.write(json.dumps(project_info).encode())
-        elif self.path == '/layers':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            layers_info = get_layers_info()
-            self.wfile.write(json.dumps(layers_info).encode())
+        if self.path in self.routes:
+            self.send_json_response(self.routes[self.path]())
         elif self.path.startswith('/layer/'):
-            layer_id = self.path.split('/')[-1]
-            layer_data = export_layer_data(layer_id)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(layer_data).encode())
+            self.send_json_response(export_layer_data(self.path.split('/')[-1]))
         elif self.path.startswith('/layerstyle/'):
-            layer_id = self.path.split('/')[-1]
-            style_data = export_layer_style(layer_id)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(style_data).encode())
-        elif self.path == '/extent':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            extent_info = get_map_canvas_extent()
-            self.wfile.write(json.dumps(extent_info).encode())
-        elif self.path == '/snapshot':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            snapshot_data = get_map_snapshot()
-            self.wfile.write(json.dumps(snapshot_data).encode())
+            self.send_json_response(export_layer_style(self.path.split('/')[-1]))
         else:
             self.send_error(404)
+
+    def send_json_response(self, data):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
 
 
 def get_map_snapshot():
     canvas = iface.mapCanvas()
-    settings = canvas.mapSettings()
-
-    # Create a QImage with the same dimensions as the map canvas
     img = QImage(QSize(canvas.width(), canvas.height()), QImage.Format_ARGB32)
-    img.fill(0)  # Fill with transparent color
-
-    # Create a QPainter to render the map onto the image
+    img.fill(0)
     painter = QPainter(img)
-    job = QgsMapRendererCustomPainterJob(settings, painter)
+    job = QgsMapRendererCustomPainterJob(canvas.mapSettings(), painter)
     job.start()
     job.waitForFinished()
     painter.end()
 
-    # Convert the image to base64
-    byte_array = QByteArray()
-    buffer = QBuffer(byte_array)
+    buffer = QBuffer()
     buffer.open(QBuffer.WriteOnly)
     img.save(buffer, "PNG")
-    img_str = base64.b64encode(byte_array.data()).decode()
+    img_str = base64.b64encode(buffer.data()).decode()
 
-    return {
-        'image': img_str,
-        'width': canvas.width(),
-        'height': canvas.height()
-    }
+    return {'image': img_str, 'width': canvas.width(), 'height': canvas.height()}
 
 
 def get_project_info():
     project = QgsProject.instance()
     canvas = iface.mapCanvas()
-
-    # Get project CRS
     project_crs = project.crs()
-
-    # Get map units
-    map_units = project_crs.mapUnits()
-
-    canvas = iface.mapCanvas()
     project_extent = canvas.extent()
 
     return {
@@ -112,7 +72,7 @@ def get_project_info():
             'xmax': project_extent.xMaximum(),
             'ymax': project_extent.yMaximum()
         },
-        'map_units': QgsUnitTypes.toString(map_units),
+        'map_units': QgsUnitTypes.toString(project_crs.mapUnits()),
         'layer_count': len(project.mapLayers()),
         'canvas_size': {
             'width': canvas.width(),
@@ -126,57 +86,45 @@ def get_layers_info():
     project = QgsProject.instance()
     layers = []
     for layer_id, layer in project.mapLayers().items():
-        if layer.type() == QgsVectorLayer.VectorLayer:
-            layer_crs = layer.crs()
+        layer_crs = layer.crs()
+        common_info = {
+            'id': layer_id,
+            'name': layer.name(),
+            'crs': {
+                'auth_id': layer_crs.authid(),
+                'description': layer_crs.description(),
+                'is_geographic': layer_crs.isGeographic(),
+                'proj_definition': layer_crs.toProj4()
+            },
+            'extent': {
+                'xmin': layer.extent().xMinimum(),
+                'ymin': layer.extent().yMinimum(),
+                'xmax': layer.extent().xMaximum(),
+                'ymax': layer.extent().yMaximum()
+            }
+        }
+
+        if layer.type() == QgsMapLayer.VectorLayer:
+            geometry_type = QgsWkbTypes.displayString(layer.wkbType())
             layer_info = {
-                'id': layer_id,
-                'name': layer.name(),
-                'type': QgsWkbTypes.displayString(layer.wkbType()),
+                **common_info,
+                'type': 'vector',
+                'geometry_type': geometry_type,
                 'feature_count': layer.featureCount(),
-                'crs': {
-                    'auth_id': layer_crs.authid(),
-                    'description': layer_crs.description(),
-                    'is_geographic': layer_crs.isGeographic(),
-                    'proj_definition': layer_crs.toProj4()
-                },
-                'extent': {
-                    'xmin': layer.extent().xMinimum(),
-                    'ymin': layer.extent().yMinimum(),
-                    'xmax': layer.extent().xMaximum(),
-                    'ymax': layer.extent().yMaximum()
-                },
                 'style': get_layer_style(layer)
             }
-            layers.append(layer_info)
-    return {'layers': layers}
-
-
-def get_layers_info():
-    project = QgsProject.instance()
-    layers = []
-    for layer_id, layer in project.mapLayers().items():
-        if layer.type() == QgsVectorLayer.VectorLayer:
-            layer_crs = layer.crs()
+        elif layer.type() == QgsMapLayer.RasterLayer:
+            provider = layer.dataProvider()
             layer_info = {
-                'id': layer_id,
-                'name': layer.name(),
-                'type': QgsWkbTypes.displayString(layer.wkbType()),
-                'feature_count': layer.featureCount(),
-                'crs': {
-                    'auth_id': layer_crs.authid(),
-                    'description': layer_crs.description(),
-                    'is_geographic': layer_crs.isGeographic(),
-                    'proj_definition': layer_crs.toProj4()
-                },
-                'extent': {
-                    'xmin': layer.extent().xMinimum(),
-                    'ymin': layer.extent().yMinimum(),
-                    'xmax': layer.extent().xMaximum(),
-                    'ymax': layer.extent().yMaximum()
-                },
-                'style': get_layer_style(layer)
+                **common_info,
+                'type': 'Displacement' if layer.name().lower() in ['displace', 'displacement'] else 'raster',
+                'width': provider.xSize(),
+                'height': provider.ySize()
             }
-            layers.append(layer_info)
+        else:
+            continue
+
+        layers.append(layer_info)
     return {'layers': layers}
 
 
@@ -185,24 +133,18 @@ def get_layer_style(layer):
     if isinstance(renderer, QgsSingleSymbolRenderer):
         symbol = renderer.symbol()
         if isinstance(symbol, QgsMarkerSymbol):
-            color = symbol.color().name()
-            size = symbol.size()
-            size_unit = symbol.sizeUnit()
-            scale_method = symbol.scaleMethod()
             return {
                 'symbol_type': symbol.type(),
-                'color': color,
-                'size': size,
-                'size_unit': str(size_unit),
-                'scale_method': str(scale_method)
+                'color': symbol.color().name(),
+                'size': symbol.size(),
+                'size_unit': str(symbol.sizeUnit()),
+                'scale_method': str(symbol.scaleMethod())
             }
         elif isinstance(symbol, QgsLineSymbol):
-            color = symbol.color().name()
-            width = symbol.width()
             return {
                 'symbol_type': symbol.type(),
-                'color': color,
-                'width': width
+                'color': symbol.color().name(),
+                'width': symbol.width()
             }
         elif isinstance(symbol, QgsFillSymbol):
             fill_color = symbol.color().name()
@@ -225,34 +167,43 @@ def export_layer_data(layer_id):
     if not layer:
         return {"error": "Layer not found"}
 
-    features = layer.getFeatures()
-    data = []
-    for feature in features:
-        geom = feature.geometry()
-        if geom:
-            geom_type = QgsWkbTypes.displayString(geom.wkbType())
-            attributes = {field.name(): convert_to_python(feature[field.name()]) for field in layer.fields()}
-            feature_data = {
-                "type": geom_type,
-                "geometry": json.loads(geom.asJson()),
-                "attributes": attributes
+    if layer.type() == QgsMapLayer.VectorLayer:
+        features = []
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom:
+                features.append({
+                    "type": QgsWkbTypes.displayString(geom.wkbType()),
+                    "geometry": json.loads(geom.asJson()),
+                    "attributes": {field.name(): convert_to_python(feature[field.name()]) for field in layer.fields()}
+                })
+        return {"features": features}
+    elif layer.type() == QgsMapLayer.RasterLayer:
+        provider = layer.dataProvider()
+        return {
+            "type": "raster",
+            "width": provider.xSize(),
+            "height": provider.ySize(),
+            "bands": provider.bandCount(),
+            "data_type": provider.dataType(1),
+            "extent": {
+                "xmin": layer.extent().xMinimum(),
+                "ymin": layer.extent().yMinimum(),
+                "xmax": layer.extent().xMaximum(),
+                "ymax": layer.extent().yMaximum()
             }
-            data.append(feature_data)
-    return {"features": data}
+        }
+    else:
+        return {"error": "Unsupported layer type"}
 
 
 def export_layer_style(layer_id):
     layer = QgsProject.instance().mapLayer(layer_id)
-    if not layer:
-        return {"error": "Layer not found"}
-
-    style = get_layer_style(layer)
-    return style
+    return {"error": "Layer not found"} if not layer else get_layer_style(layer)
 
 
 def get_map_canvas_extent():
-    canvas = iface.mapCanvas()
-    extent = canvas.extent()
+    extent = iface.mapCanvas().extent()
     return {
         'xmin': extent.xMinimum(),
         'xmax': extent.xMaximum(),
@@ -262,9 +213,7 @@ def get_map_canvas_extent():
 
 
 def convert_to_python(value):
-    if isinstance(value, (int, float, str, bool)):
-        return value
-    return str(value)
+    return value if isinstance(value, (int, float, str, bool)) else str(value)
 
 
 def run_server():

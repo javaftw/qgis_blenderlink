@@ -1,12 +1,12 @@
+import bmesh
 import bpy
 import requests
-import bmesh
 import base64
 from bpy.props import StringProperty
 from bpy.types import Operator
+
 from .utils import error_handler, add_custom_properties
 
-# Operator to import a selected layer from QGIS into Blender
 class QGIS_OT_import_layer(Operator):
     bl_idname = "qgis.import_layer"
     bl_label = "Import"
@@ -34,7 +34,9 @@ class QGIS_OT_import_layer(Operator):
         if existing_collection:
             bpy.ops.object.select_all(action='DESELECT')
             for obj in existing_collection.objects:
-                bpy.data.objects.remove(obj, do_unlink=True)
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                bpy.ops.object.delete()
             bpy.data.collections.remove(existing_collection)
 
         # Create new collection for the layer
@@ -49,16 +51,26 @@ class QGIS_OT_import_layer(Operator):
         fill_color = style_data.get('color', '#ffffff')
         fill_color_rgba = self.hex_to_rgba(fill_color)
 
-        # Import features based on geometry type
-        if layer.type == "Point":
+        # Import features based on type
+        if layer.type == "Displacement":
+            return self.import_as_displacement(context)
+        elif "Point" in layer.type:
             if layer.make_spheres:
-                self.import_as_spheres(context, features, layer.sphere_radius, layer.sphere_u_segments, layer.sphere_v_segments, layer.name, layer_collection, qgis_offset, fill_color_rgba)
+                self.import_as_spheres(context, features, layer.sphere_radius, layer.sphere_u_segments,
+                                       layer.sphere_v_segments, layer.name, layer_collection, qgis_offset,
+                                       fill_color_rgba)
             else:
                 self.import_as_vertices(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
         elif "LineString" in layer.type:
             self.import_as_lines(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
         elif "Polygon" in layer.type:
             self.import_as_polygons(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
+        elif layer.type == "raster":
+            self.report({'INFO'}, "Raster layers are not imported directly")
+            return {'CANCELLED'}
+        else:
+            self.report({'WARNING'}, f"Unsupported layer type: {layer.type}")
+            return {'CANCELLED'}
 
         self.report({'INFO'}, f"Imported {len(features)} features")
         return {'FINISHED'}
@@ -104,6 +116,10 @@ class QGIS_OT_import_layer(Operator):
 
     def import_as_spheres(self, context, features, radius, u_segs, v_segs, layer_name, layer_collection, offset, color):
         mat = self.create_material(f"{layer_name}_material", color)
+
+        if layer_collection.name not in bpy.context.scene.collection.children:
+            bpy.context.scene.collection.children.link(layer_collection)
+
         for index, feature in enumerate(features):
             coords = self.apply_offset(feature['geometry']['coordinates'], offset)
             bpy.ops.mesh.primitive_uv_sphere_add(
@@ -114,15 +130,18 @@ class QGIS_OT_import_layer(Operator):
             )
             sphere_obj = context.active_object
             sphere_obj.data.materials.append(mat)
+
+            for coll in sphere_obj.users_collection:
+                coll.objects.unlink(sphere_obj)
+            layer_collection.objects.link(sphere_obj)
+
             sphere_obj.name = f"{layer_name}.point.{index}"
             if 'name' in feature['attributes']:
                 sphere_obj.name = f"{layer_name}.point.{feature['attributes']['name']}"
 
-            bpy.context.scene.collection.objects.unlink(sphere_obj)
-            layer_collection.objects.link(sphere_obj)
-            bpy.context.view_layer.update()
-
             add_custom_properties(sphere_obj, feature['attributes'])
+
+        bpy.context.view_layer.update()
 
     def import_as_lines(self, context, features, layer_name, layer_collection, offset, color):
         mat = self.create_material(f"{layer_name}_material", color)
@@ -181,6 +200,56 @@ class QGIS_OT_import_layer(Operator):
                 obj.name = f"{layer_name}.polygon.{feature['attributes']['name']}"
 
             add_custom_properties(obj, feature['attributes'])
+
+    def import_as_displacement(self, context):
+        extent_obj = bpy.data.objects.get("qgis_extent")
+        if not extent_obj:
+            self.report({'ERROR'}, "qgis_extent object not found")
+            return {'CANCELLED'}
+
+        displaced_obj = extent_obj.copy()
+        displaced_obj.data = extent_obj.data.copy()
+        displaced_obj.name = "qgis_extent_displaced"
+        bpy.context.scene.collection.objects.link(displaced_obj)
+
+        response = requests.get(f'{context.scene.qgis_server_url}/snapshot')
+        data = response.json()
+        image_data = base64.b64decode(data['image'])
+
+        image_name = "QGISSnapshot"
+        if image_name in bpy.data.images:
+            bpy_image = bpy.data.images[image_name]
+        else:
+            bpy_image = bpy.data.images.new(image_name, width=data['width'], height=data['height'])
+        bpy_image.pack(data=image_data, data_len=len(image_data))
+        bpy_image.source = 'FILE'
+        bpy_image.reload()
+
+        width = displaced_obj.dimensions.x
+        height = displaced_obj.dimensions.y
+        aspect_ratio = width / height
+        subdivisions = max(int(aspect_ratio * 10), int(10 / aspect_ratio))
+
+        bpy.context.view_layer.objects.active = displaced_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.loopcut_slide(number=subdivisions, edge_index=2)
+        bpy.ops.mesh.loopcut_slide(number=subdivisions, edge_index=0)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        subdiv_mod = displaced_obj.modifiers.new(name="Subdivision", type='SUBSURF')
+        subdiv_mod.levels = 2
+        subdiv_mod.render_levels = 2
+
+        disp_mod = displaced_obj.modifiers.new(name="Displacement", type='DISPLACE')
+        disp_mod.texture_coords = 'UV'
+        disp_mod.strength = 1.0
+
+        texture = bpy.data.textures.new("DisplacementTexture", type='IMAGE')
+        texture.image = bpy_image
+        disp_mod.texture = texture
+
+        self.report({'INFO'}, "Displacement map applied")
+        return {'FINISHED'}
 
 def register():
     bpy.utils.register_class(QGIS_OT_import_layer)
