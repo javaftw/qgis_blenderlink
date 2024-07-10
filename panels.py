@@ -67,8 +67,8 @@ class QGIS_PT_import_panel(Panel):
                      emboss=False)
             # Display the layer's name
             row.label(text=layer.name)
-            # Add an "Import" button for each layer
-            if layer.type != "raster":
+            # Add an "Import" button for each layer except rasters/displacement
+            if layer.type.lower() not in ["raster", "displacement"]:
                 row.operator(QGIS_OT_import_layer.bl_idname, text="Import").layer_id = layer.layer_id
 
             # If the layer is expanded, show additional details
@@ -78,7 +78,7 @@ class QGIS_PT_import_panel(Panel):
                 # Display the feature count of the layer
                 box.label(text=f"Feature count: {layer.feature_count}")
                 # If the layer type is "Point", provide additional options for importing as spheres
-                if layer.type == "Point":
+                if layer.type.lower() == "point":
                     # Add a checkbox for making spheres
                     box.prop(layer, "make_spheres")
                     # If making spheres, provide additional properties to configure sphere geometry
