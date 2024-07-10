@@ -33,6 +33,7 @@ class QGISLayerProperties(PropertyGroup):
     )
     is_expanded: BoolProperty(default=True)
 
+
 class QGISProjectProperties(PropertyGroup):
     label: StringProperty(name="Project Info")
     name: StringProperty(name="Project Name")

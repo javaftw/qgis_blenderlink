@@ -52,9 +52,7 @@ class QGIS_OT_import_layer(Operator):
         fill_color_rgba = self.hex_to_rgba(fill_color)
 
         # Import features based on type
-        if "displacement" in layer.type.lower():
-            self.import_as_displacement(context)
-        elif "point" in layer.type.lower():
+        if "point" in layer.type.lower():
             if layer.make_spheres:
                 self.import_as_spheres(context, features, layer.sphere_radius, layer.sphere_u_segments,
                                        layer.sphere_v_segments, layer.name, layer_collection, qgis_offset,
@@ -65,8 +63,8 @@ class QGIS_OT_import_layer(Operator):
             self.import_as_lines(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
         elif "polygon" in layer.type.lower():
             self.import_as_polygons(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
-        elif "raster" in layer.type.lower():
-            self.report({'INFO'}, "Raster layers are not imported directly")
+        elif layer.type.lower() in ["raster", "displacement"]:
+            self.report({'INFO'}, "Raster/Displacement layers are not imported directly")
             return {'CANCELLED'}
         else:
             self.report({'WARNING'}, f"Unsupported layer type: {layer.type}")
@@ -201,55 +199,7 @@ class QGIS_OT_import_layer(Operator):
 
             add_custom_properties(obj, feature['attributes'])
 
-    def import_as_displacement(self, context):
-        extent_obj = bpy.data.objects.get("qgis_extent")
-        if not extent_obj:
-            self.report({'ERROR'}, "qgis_extent object not found")
-            return {'CANCELLED'}
 
-        displaced_obj = extent_obj.copy()
-        displaced_obj.data = extent_obj.data.copy()
-        displaced_obj.name = "qgis_extent_displaced"
-        bpy.context.scene.collection.objects.link(displaced_obj)
-
-        response = requests.get(f'{context.scene.qgis_server_url}/snapshot')
-        data = response.json()
-        image_data = base64.b64decode(data['image'])
-
-        image_name = "QGISSnapshot"
-        if image_name in bpy.data.images:
-            bpy_image = bpy.data.images[image_name]
-        else:
-            bpy_image = bpy.data.images.new(image_name, width=data['width'], height=data['height'])
-        bpy_image.pack(data=image_data, data_len=len(image_data))
-        bpy_image.source = 'FILE'
-        bpy_image.reload()
-
-        width = displaced_obj.dimensions.x
-        height = displaced_obj.dimensions.y
-        aspect_ratio = width / height
-        subdivisions = max(int(aspect_ratio * 10), int(10 / aspect_ratio))
-
-        bpy.context.view_layer.objects.active = displaced_obj
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.loopcut_slide(number=subdivisions, edge_index=2)
-        bpy.ops.mesh.loopcut_slide(number=subdivisions, edge_index=0)
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        subdiv_mod = displaced_obj.modifiers.new(name="Subdivision", type='SUBSURF')
-        subdiv_mod.levels = 2
-        subdiv_mod.render_levels = 2
-
-        disp_mod = displaced_obj.modifiers.new(name="Displacement", type='DISPLACE')
-        disp_mod.texture_coords = 'UV'
-        disp_mod.strength = 1.0
-
-        texture = bpy.data.textures.new("DisplacementTexture", type='IMAGE')
-        texture.image = bpy_image
-        disp_mod.texture = texture
-
-        self.report({'INFO'}, "Displacement map applied")
-        return {'FINISHED'}
 
 def register():
     bpy.utils.register_class(QGIS_OT_import_layer)

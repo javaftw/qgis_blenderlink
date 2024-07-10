@@ -32,6 +32,7 @@ def register():
 
     bpy.types.Scene.qgis_layers = bpy.props.CollectionProperty(type=QGISLayerProperties)
     bpy.types.Scene.qgis_project = bpy.props.CollectionProperty(type=QGISProjectProperties)
+    bpy.types.Scene.qgis_displacement = bpy.props.CollectionProperty(type=QGISProjectProperties)
     bpy.types.Scene.qgis_linked = bpy.props.BoolProperty(default=False)
     bpy.types.Scene.qgis_server_url = bpy.props.StringProperty(
         name="QGIS Server URL",
@@ -61,6 +62,7 @@ def unregister():
     del bpy.types.Scene.qgis_linked
     del bpy.types.Scene.qgis_server_url
     del bpy.types.Scene.qgis_offset
+    del bpy.types.Scene.qgis_displacement
 
 
 if __name__ == "__main__":
