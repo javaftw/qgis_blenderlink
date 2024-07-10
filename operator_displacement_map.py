@@ -1,6 +1,8 @@
 import base64
 import bpy
 import requests
+import math
+import bmesh
 from bpy.types import Operator
 from bpy.props import StringProperty, FloatProperty
 
@@ -55,19 +57,43 @@ class QGIS_OT_displacement_map(Operator):
         bpy_image.source = 'FILE'
         bpy_image.reload()
 
+        # Calculate subdivisions based on aspect ratio
+        width = extent_obj.dimensions.x
+        height = extent_obj.dimensions.y
+        aspect_ratio = width / height
+        min_divisions = 10
+
+        if aspect_ratio >= 1:
+            x_divisions = max(min_divisions, math.ceil(min_divisions * aspect_ratio))
+            y_divisions = min_divisions
+        else:
+            x_divisions = min_divisions
+            y_divisions = max(min_divisions, math.ceil(min_divisions / aspect_ratio))
+
+        # Create new bmesh
+        bm = bmesh.new()
+        bmesh.ops.create_grid(bm, x_segments=x_divisions, y_segments=y_divisions, size=1)
+
+        # Apply bmesh to object
+        bm.to_mesh(displaced_obj.data)
+        bm.free()
+
+        # Scale to match original dimensions
+        displaced_obj.dimensions = (width, height, 0)
+
         # Ensure proper UV mapping
         bpy.context.view_layer.objects.active = displaced_obj
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.uv.unwrap()
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        # Controlled subdivision
-        subdivisions = min(6, max(2, int(max(displaced_obj.dimensions.x, displaced_obj.dimensions.y) / 10)))
-
+        # Apply subdivision modifier for additional detail
         subdiv_mod = displaced_obj.modifiers.new(name="Subdivision", type='SUBSURF')
-        subdiv_mod.levels = subdivisions
-        subdiv_mod.render_levels = subdivisions
+        subdiv_mod.subdivision_type = 'SIMPLE'
+        subdiv_mod.levels = 2
+        subdiv_mod.render_levels = 4
 
+        # Apply displacement modifier
         disp_mod = displaced_obj.modifiers.new(name="Displacement", type='DISPLACE')
         disp_mod.texture_coords = 'UV'
         disp_mod.strength = self.displacement_strength
@@ -75,6 +101,9 @@ class QGIS_OT_displacement_map(Operator):
         texture = bpy.data.textures.new("DisplacementTexture", type='IMAGE')
         texture.image = bpy_image
         disp_mod.texture = texture
+
+        # Ensure the displaced object matches the extent object's size
+        displaced_obj.dimensions = extent_obj.dimensions
 
         self.report({'INFO'}, "Displacement map applied")
 
