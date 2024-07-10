@@ -14,6 +14,7 @@ from .operator_connect import QGIS_OT_connect
 from .operator_update_layers import QGIS_OT_update_layers
 from .operator_import_layer import QGIS_OT_import_layer
 from .operator_snapshot import QGIS_OT_update_snapshot
+from .operator_displacement_map import QGIS_OT_displacement_map
 
 from .properties import QGISLayerProperties, QGISProjectProperties
 from .panels import QGIS_PT_import_panel
@@ -26,6 +27,7 @@ def register():
     bpy.utils.register_class(QGIS_OT_update_layers)
     bpy.utils.register_class(QGIS_OT_import_layer)
     bpy.utils.register_class(QGIS_PT_import_panel)
+    bpy.utils.register_class(QGIS_OT_displacement_map)
     bpy.utils.register_class(QGIS_OT_update_snapshot)
 
     bpy.types.Scene.qgis_layers = bpy.props.CollectionProperty(type=QGISLayerProperties)
@@ -46,6 +48,7 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(QGIS_PT_import_panel)
+    bpy.utils.unregister_class(QGIS_OT_displacement_map)
     bpy.utils.unregister_class(QGIS_OT_import_layer)
     bpy.utils.unregister_class(QGIS_OT_update_layers)
     bpy.utils.unregister_class(QGIS_OT_connect)

@@ -52,20 +52,20 @@ class QGIS_OT_import_layer(Operator):
         fill_color_rgba = self.hex_to_rgba(fill_color)
 
         # Import features based on type
-        if layer.type == "Displacement":
-            return self.import_as_displacement(context)
-        elif "Point" in layer.type:
+        if "displacement" in layer.type.lower():
+            self.import_as_displacement(context)
+        elif "point" in layer.type.lower():
             if layer.make_spheres:
                 self.import_as_spheres(context, features, layer.sphere_radius, layer.sphere_u_segments,
                                        layer.sphere_v_segments, layer.name, layer_collection, qgis_offset,
                                        fill_color_rgba)
             else:
                 self.import_as_vertices(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
-        elif "LineString" in layer.type:
+        elif "linestring" in layer.type.lower():
             self.import_as_lines(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
-        elif "Polygon" in layer.type:
+        elif "polygon" in layer.type.lower():
             self.import_as_polygons(context, features, layer.name, layer_collection, qgis_offset, fill_color_rgba)
-        elif layer.type == "raster":
+        elif "raster" in layer.type.lower():
             self.report({'INFO'}, "Raster layers are not imported directly")
             return {'CANCELLED'}
         else:

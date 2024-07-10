@@ -1,16 +1,15 @@
+import base64
+
 import bpy
 import requests
-import bmesh
-import base64
-from bpy.props import StringProperty
 from bpy.types import Operator
-from .utils import error_handler, add_custom_properties
+
 
 # Operator to update the QGIS map snapshot
-class QGIS_OT_elev_map(Operator):
-    bl_idname = "qgis.elev_map"
-    bl_label = "Set as elevation"
-    bl_description = "Set the QGIS map canvas snapshot as elevation map"
+class QGIS_OT_displacement_map(Operator):
+    bl_idname = "qgis.displacement_map"
+    bl_label = "Set displacement"
+    bl_description = "Set the QGIS map canvas snapshot as displacement map"
 
     @classmethod
     def poll(cls, context):
@@ -25,7 +24,7 @@ class QGIS_OT_elev_map(Operator):
         image_data = base64.b64decode(data['image'])
 
         # Create or get the image in Blender
-        image_name = "QGISElevMap"
+        image_name = "QGISDisplacementMap"
         if image_name in bpy.data.images:
             bpy_image = bpy.data.images[image_name]
         else:
@@ -41,7 +40,7 @@ class QGIS_OT_elev_map(Operator):
         bpy_image.reload()
 
         # Create material and assign it to the QGIS extent rectangle
-        mat_name = "QGISElevMapMaterial"
+        mat_name = "QGISDisplacementMapMaterial"
         if mat_name in bpy.data.materials:
             mat = bpy.data.materials[mat_name]
         else:
@@ -77,10 +76,10 @@ class QGIS_OT_elev_map(Operator):
         return {'FINISHED'}
 
 def register():
-    bpy.utils.register_class(QGIS_OT_elev_map)
+    bpy.utils.register_class(QGIS_OT_displacement_map)
 
 def unregister():
-    bpy.utils.unregister_class(QGIS_OT_elev_map)
+    bpy.utils.unregister_class(QGIS_OT_displacement_map)
 
 if __name__ == "__main__":
     register()

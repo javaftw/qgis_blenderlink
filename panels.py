@@ -4,6 +4,7 @@ from .operator_connect import QGIS_OT_connect
 from .operator_update_layers import QGIS_OT_update_layers
 from .operator_import_layer import QGIS_OT_import_layer
 from .operator_snapshot import QGIS_OT_update_snapshot
+from .operator_displacement_map import QGIS_OT_displacement_map
 
 
 # Define a new panel in the 3D Viewport UI
@@ -70,6 +71,8 @@ class QGIS_PT_import_panel(Panel):
             # Add an "Import" button for each layer except rasters/displacement
             if layer.type.lower() not in ["raster", "displacement"]:
                 row.operator(QGIS_OT_import_layer.bl_idname, text="Import").layer_id = layer.layer_id
+            if layer.type.lower() == "displacement":
+                row.operator(QGIS_OT_displacement_map.bl_idname, text="Displace").layer_id = layer.layer_id
 
             # If the layer is expanded, show additional details
             if layer.is_expanded:
